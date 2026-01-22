@@ -61,7 +61,7 @@ userSchema.pre("save", async function () {
 userSchema.methods.isPasswordCorrect = async function (password) {
   return await bcrypt.compare(password, this.password);
 };
-
+// short lived
 userSchema.methods.generateAccessToken = function () {
   return jwt.sign(
     {
@@ -77,6 +77,7 @@ userSchema.methods.generateAccessToken = function () {
     }
   );
 };
+// long lived
 userSchema.methods.generateRefreshToken = function () {
   return jwt.sign(
     {
