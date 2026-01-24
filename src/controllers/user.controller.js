@@ -39,7 +39,9 @@ const registerUser = asyncHandler(async (req, res) => {
   // console.log("email is : ",email );
 
   if (
-    [fullname, email, username, password].some((field) => field?.trim() === "")
+    [fullname, email, username, password].some(
+      (field) => field?.toString().trim() === "",
+    )
   ) {
     throw new ApiError(400, "All fields are required");
   }
@@ -110,11 +112,7 @@ const loginUser = asyncHandler(async (req, res) => {
   });
 
   if (!user) {
-    throw new ApiError(
-      404,
-      "User does not exist with this username : ",
-      username,
-    );
+    throw new ApiError(404, "User does not exist");
   }
 
   const isPasswordValid = await user.isPasswordCorrect(password);
@@ -201,16 +199,17 @@ const refreshAcessToken = asyncHandler(async (req, res) => {
       secure: true,
     };
 
-    const { accessToken, new_refreshToken } =
-      await generateAccessAndRefreshTokens(user._id);
+    const { accessToken, refreshToken } = await generateAccessAndRefreshTokens(
+      user._id,
+    );
     return res
       .status(200)
       .cookie("accessToken", accessToken, options)
-      .cookie("refreshToken", new_refreshToken, options)
+      .cookie("refreshToken", refreshToken, options)
       .json(
         new ApiResponse(
           200,
-          { accessToken, new_refreshToken },
+          { accessToken, refreshToken },
           "Access token refreshed successfully",
         ),
       );
@@ -247,7 +246,7 @@ const updateAccountDetails = asyncHandler(async (req, res) => {
     throw new ApiError(400, "All fields are required");
   }
 
-  const user = User.findByIdAndUpdate(
+  const user = await User.findByIdAndUpdate(
     req.user?._id,
     {
       $set: {
@@ -268,7 +267,7 @@ const updateAccountDetails = asyncHandler(async (req, res) => {
 const updateUserAvatar = asyncHandler(async (req, res) => {
   const avatarLocalPath = req.file?.path;
 
-  if (!avatar) {
+  if (!avatarLocalPath) {
     throw new ApiError(400, "Avatar file is missing");
   }
 
