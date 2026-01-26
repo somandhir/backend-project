@@ -14,7 +14,7 @@ import { ApiError } from "../utils/ApiError.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
 import { Video } from "../models/video.model.js";
 import { User } from "../models/user.model.js";
-import { uploadOnCloudinary } from "../utils/cloudinary.js";
+import { uploadVideoStream, uploadImageStream } from "../utils/cloudinary.js";
 
 const uploadVideo = asyncHandler(async (req, res) => {
   /*
@@ -25,39 +25,50 @@ const uploadVideo = asyncHandler(async (req, res) => {
         save video in db
         return saved video
     */
+
   const { title, description } = req.body;
   if (!title || !description) {
     throw new ApiError(400, "All fields are required");
   }
 
-  const videoLocalPath = req.files?.videoFile?.[0]?.path;
-  const thumbnailLocalPath = req.files?.thumbnail?.[0]?.path;
+  const videoBuffer = req.files?.videoFile?.[0]?.buffer;
+  const thumbnailBuffer = req.files?.thumbnail?.[0]?.buffer;
 
-  if (!videoLocalPath) {
+  if (!videoBuffer) {
     throw new ApiError(400, "video file is required");
   }
-  if (!thumbnailLocalPath) {
+  if (!thumbnailBuffer) {
     throw new ApiError(400, "thumbnail file is required");
   }
+  
+  const sizeMB = (videoBuffer.length / 1024 / 1024).toFixed(2);
+  console.log("Video size (MB):", sizeMB);
+  if (sizeMB > 100) {
+    throw new ApiError(400, "Video too large. Max allowed size is 100MB.");
+  }
 
-  const videoUpload = await uploadOnCloudinary(videoLocalPath);
-  const thumbnailUpload = await uploadOnCloudinary(thumbnailLocalPath);
+  const videoUpload = await uploadVideoStream(videoBuffer);
+  const thumbnailUpload = await uploadImageStream(thumbnailBuffer);
+
+  if (!videoUpload) {
+    throw new ApiError(400, "Video upload failed");
+  }
 
   const duration = Math.round(videoUpload?.duration);
   if (!duration) {
     throw new ApiError(400, "Unable to extract video duration");
   }
 
-  if (!videoUpload?.url) {
+  if (!videoUpload?.secure_url) {
     throw new ApiError(400, "Video upload failed");
   }
-  if (!thumbnailUpload?.url) {
+  if (!thumbnailUpload?.secure_url) {
     throw new ApiError(400, "Thumbnail upload failed");
   }
 
   const video = await Video.create({
-    videoFile: videoUpload.url,
-    thumbnail: thumbnailUpload.url,
+    videoFile: videoUpload.secure_url,
+    thumbnail: thumbnailUpload.secure_url,
     title,
     description,
     duration,

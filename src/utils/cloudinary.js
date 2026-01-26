@@ -1,6 +1,4 @@
 import { v2 as cloudinary } from "cloudinary";
-import fs from "fs";
-
 
 cloudinary.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
@@ -8,39 +6,39 @@ cloudinary.config({
   api_secret: process.env.CLOUDINARY_API_SECRET,
 });
 
-// console.log("ENV CHECK:", {
-//   cloud: process.env.CLOUDINARY_CLOUD_NAME,
-//   key: process.env.CLOUDINARY_API_KEY,
-//   secret: process.env.CLOUDINARY_API_SECRET ? "LOADED" : "MISSING",
-// } );
+const uploadVideoStream = (buffer) => {
+  return new Promise((resolve, reject) => {
+    const stream = cloudinary.uploader.upload_stream(
+      {
+        resource_type: "video",
+        folder: "videos",
+      },
+      (error, result) => {
+        if (error) {
+          console.error("Cloudinary video error:", error);
+          return reject(new Error(error.message || "Video upload failed"));
+        }
+        resolve(result);
+      },
+    );
 
-const uploadOnCloudinary = async (localFilePath) => {
-  try {
-    if (!localFilePath) return null;
-    
+    stream.end(buffer);
+  });
+};
+const uploadImageStream = (buffer) => {
+  return new Promise((resolve, reject) => {
+    const uploadStream = cloudinary.uploader.upload_stream(
+      {
+        resource_type: "image",
+      },
+      (error, result) => {
+        if (error) return reject(error);
+        resolve(result);
+      },
+    );
 
-    const response = await cloudinary.uploader.upload(localFilePath, {
-      resource_type: "image",
-    });
-
-    // console.log(" Uploaded to Cloudinary:", response.secure_url);
-
-    //  safely delete temp file
-    if (fs.existsSync(localFilePath)) {
-      fs.unlinkSync(localFilePath);
-    }
-
-    return response;
-  } catch (error) {
-    console.error(" Cloudinary upload failed:");
-    console.error(error);
-
-    if (fs.existsSync(localFilePath)) {
-      fs.unlinkSync(localFilePath);
-    }
-
-    return null;
-  }
+    uploadStream.end(buffer);
+  });
 };
 
-export { uploadOnCloudinary };
+export { uploadVideoStream, uploadImageStream };

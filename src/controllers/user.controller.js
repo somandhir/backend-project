@@ -1,7 +1,7 @@
 import { asyncHandler } from "../utils/asynHandler.js";
 import { ApiError } from "../utils/ApiError.js";
 import { User } from "../models/user.model.js";
-import { uploadOnCloudinary } from "../utils/cloudinary.js";
+import { uploadImageStream } from "../utils/cloudinary.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
 import jwt from "jsonwebtoken";
 import mongoose from "mongoose";
@@ -56,20 +56,21 @@ const registerUser = asyncHandler(async (req, res) => {
   // console.log(req.body);
   // console.log(req.files);
 
-  const avatarLocalPath = req.files?.avatar?.[0]?.path;
-  const coverImageLocalPath = req.files?.coverImage?.[0]?.path;
+  const avatarBuffer = req.files?.avatar?.[0]?.buffer;
+  const coverImageBuffer = req.files?.coverImage?.[0]?.buffer;
 
-  if (!avatarLocalPath) {
+  if (!avatarBuffer) {
     throw new ApiError(400, "Avatar file is required");
   }
 
-  const avatar = await uploadOnCloudinary(avatarLocalPath.replace(/\\/g, "/"));
-  const coverImage = coverImageLocalPath
-    ? await uploadOnCloudinary(coverImageLocalPath.replace(/\\/g, "/"))
+  const avatar = await uploadImageStream(avatarBuffer, "image");
+
+  const coverImage = coverImageBuffer
+    ? await uploadImageStream(coverImageBuffer, "image")
     : null;
 
-  if (!avatar) {
-    throw new ApiError(400, "Avatar upload fail on cloudinary");
+  if (!avatar?.url) {
+    throw new ApiError(400, "Avatar upload failed on Cloudinary");
   }
 
   const user = await User.create({
@@ -265,16 +266,16 @@ const updateAccountDetails = asyncHandler(async (req, res) => {
 });
 
 const updateUserAvatar = asyncHandler(async (req, res) => {
-  const avatarLocalPath = req.file?.path;
+  const avatarBuffer = req.file?.buffer;
 
-  if (!avatarLocalPath) {
+  if (!avatarBuffer) {
     throw new ApiError(400, "Avatar file is missing");
   }
 
-  const avatar = await uploadOnCloudinary(avatarLocalPath);
+  const avatar = await uploadImageStream(avatarBuffer, "image");
 
-  if (!avatar.url) {
-    throw new ApiError(400, "Error while uploading on avatar");
+  if (!avatar?.url) {
+    throw new ApiError(400, "Error while uploading avatar");
   }
 
   const user = await User.findByIdAndUpdate(
@@ -292,16 +293,16 @@ const updateUserAvatar = asyncHandler(async (req, res) => {
 });
 
 const updateUserCoverImage = asyncHandler(async (req, res) => {
-  const coverImageLocalPath = req.file?.path;
+  const coverImageBuffer = req.file?.buffer;
 
-  if (!coverImageLocalPath) {
+  if (!coverImageBuffer) {
     throw new ApiError(400, "Cover image file is missing");
   }
 
-  const coverImage = await uploadOnCloudinary(coverImageLocalPath);
+  const coverImage = await uploadImageStream(coverImageBuffer, "image");
 
-  if (!coverImage.url) {
-    throw new ApiError(400, "Error while uploading on cover image");
+  if (!coverImage?.url) {
+    throw new ApiError(400, "Error while uploading cover image");
   }
 
   const user = await User.findByIdAndUpdate(
