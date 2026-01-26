@@ -40,7 +40,7 @@ const uploadVideo = asyncHandler(async (req, res) => {
   if (!thumbnailBuffer) {
     throw new ApiError(400, "thumbnail file is required");
   }
-  
+
   const sizeMB = (videoBuffer.length / 1024 / 1024).toFixed(2);
   console.log("Video size (MB):", sizeMB);
   if (sizeMB > 100) {
@@ -175,10 +175,48 @@ const togglePublishStatus = asyncHandler(async (req, res) => {
     );
 });
 
+const getVideos = asyncHandler(async (req, res) => {
+  const { query, page = 1, limit = 10 } = req.query; 
+  
+  const skip = (parseInt(page) - 1) * parseInt(limit);
+
+  const filter = { isPublished: true };
+
+  if (query) {
+    filter.$or = [
+      { title: { $regex: query, $options: "i" } },
+      { description: { $regex: query, $options: "i" } },
+    ];
+  }
+
+  const videos = await Video.find(filter)
+    .sort({ createdAt: -1 })
+    .skip(skip)
+    .limit(parseInt(limit))
+    .select("_id thumbnail title duration views owner createdAt")
+    .populate("owner", "avatar username fullname");
+
+  const totalVideos = await Video.countDocuments(filter);
+
+  return res.status(200).json(
+    new ApiResponse(
+      200,
+      { 
+        videos, 
+        totalVideos, 
+        currentPage: parseInt(page),
+        totalPages: Math.ceil(totalVideos / limit) 
+      },
+      "Videos fetched successfully"
+    )
+  );
+});
+
 export {
   uploadVideo,
   getVideoById,
   updateVideo,
   deleteVideo,
   togglePublishStatus,
+  getVideos,
 };

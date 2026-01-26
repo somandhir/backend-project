@@ -7,6 +7,7 @@ import {
   updateVideo,
   uploadVideo,
   togglePublishStatus,
+  getVideos,
 } from "../controllers/video.controller.js";
 
 const router = Router();
@@ -20,6 +21,7 @@ router.route("/").post(
   uploadVideo,
 );
 
+router.route("/v/videos").get(getVideos);
 router.route("/:videoId").get(getVideoById);
 router.route("/:videoId").patch(updateVideo);
 router.route("/:videoId").delete(deleteVideo);
