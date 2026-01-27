@@ -35,4 +35,44 @@ const toggleLike = asyncHandler(async (req, res) => {
     .json(new ApiResponse(200, { isLiked: true }, "Like added succesfully"));
 });
 
-export default toggleLike;
+const likedVideos = asyncHandler(async (req, res) => {
+  const userLikedVideos = await Like.aggregate([
+    {
+      $match: {
+        likedBy: req.user._id,
+        targetType: "Video",
+      },
+    },
+    {
+      $lookup: {
+        from: "videos",
+        localField: "targetId",
+        foreignField: "_id",
+        as: "video",
+      },
+    },
+    {
+      $addFields: {
+        video: { $first: "$video" },
+      },
+    },
+    {
+      $project: {
+        _id: "$video._id",
+        title: "$video.title",
+        thumbnail: "$video.thumbnail",
+        duration: "$video.duration",
+        views: "$video.views",
+        owner: "$video.owner",
+        likedAt: "$createdAt",
+      },
+    },
+  ]);
+  return res
+    .status(200)
+    .json(
+      new ApiResponse(200, userLikedVideos, "liked video fetched successfully"),
+    );
+});
+
+export { toggleLike, likedVideos };
