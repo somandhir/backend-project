@@ -3,6 +3,7 @@ import { asyncHandler } from "../utils/asynHandler.js";
 import { ApiError } from "../utils/ApiError.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
 import { Comment } from "../models/comment.model.js";
+import { Like } from "../models/like.model.js";
 
 const writeComment = asyncHandler(async (req, res) => {
   const { comment } = req.body;
@@ -44,6 +45,19 @@ const getComments = asyncHandler(async (req, res) => {
       },
     },
     {
+      $lookup: {
+        from: "likes",
+        localField: "_id",
+        foreignField: "targetId",
+        as: "likes",
+      },
+    },
+    {
+      $addFields: {
+        likesCount: { $size: "$likes" },
+      },
+    },
+    {
       $project: {
         _id: 1,
         content: 1,
@@ -53,6 +67,7 @@ const getComments = asyncHandler(async (req, res) => {
           avatar: 1,
         },
         createdAt: 1,
+        likesCount: 1,
       },
     },
   ]);
@@ -116,6 +131,10 @@ const deleteComment = asyncHandler(async (req, res) => {
   }
 
   const result = await Comment.findByIdAndDelete(commentID);
+  await Like.deleteMany({
+    targetType: "Comment",
+    targetId: commentID,
+  });
 
   if (!result) {
     throw new ApiError(404, "Comment not found");

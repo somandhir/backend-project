@@ -14,6 +14,8 @@ import { ApiError } from "../utils/ApiError.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
 import { Video } from "../models/video.model.js";
 import { User } from "../models/user.model.js";
+import { Like } from "../models/like.model.js";
+import { Comment } from "../models/comment.model.js";
 import { uploadVideoStream, uploadImageStream } from "../utils/cloudinary.js";
 
 const uploadVideo = asyncHandler(async (req, res) => {
@@ -97,13 +99,23 @@ const getVideoById = asyncHandler(async (req, res) => {
   video.views += 1;
   await video.save({ validateBeforeSave: false });
 
+  const likesCount = await Like.countDocuments({
+    targetId: videoId,
+    targetType: "Video",
+  });
+
+  const videoData = {
+    ...video._doc,
+    likesCount,
+  };
+
   await User.findByIdAndUpdate(req.user._id, {
     $addToSet: { watchHistory: video._id },
   });
 
   return res
     .status(200)
-    .json(new ApiResponse(200, video, "Video fetched successfully"));
+    .json(new ApiResponse(200, videoData, "Video fetched successfully"));
 });
 
 const updateVideo = asyncHandler(async (req, res) => {
@@ -141,7 +153,12 @@ const deleteVideo = asyncHandler(async (req, res) => {
     throw new ApiError(403, "Not Allowed");
   }
 
-  await video.deleteOne();
+  // await video.deleteOne();
+  await Promise.all([
+    Video.findByIdAndDelete(videoId),
+    Comment.deleteMany({ video: videoId }),
+    Like.deleteMany({ targetId: videoId, targetType: "Video" }),
+  ]);
 
   return res
     .status(200)
@@ -175,41 +192,116 @@ const togglePublishStatus = asyncHandler(async (req, res) => {
     );
 });
 
+// const getVideos = asyncHandler(async (req, res) => {
+//   const { query, page = 1, limit = 10 } = req.query;
+
+//   const skip = (parseInt(page) - 1) * parseInt(limit);
+
+//   const filter = { isPublished: true };
+
+//   if (query) {
+//     filter.$or = [
+//       { title: { $regex: query, $options: "i" } },
+//       { description: { $regex: query, $options: "i" } },
+//     ];
+//   }
+
+//   const videos = await Video.find(filter)
+//     .sort({ createdAt: -1 })
+//     .skip(skip)
+//     .limit(parseInt(limit))
+//     .select("_id thumbnail title duration views owner createdAt")
+//     .populate("owner", "avatar username fullname");
+
+//   const totalVideos = await Video.countDocuments(filter);
+
+//   return res.status(200).json(
+//     new ApiResponse(
+//       200,
+//       {
+//         videos,
+//         totalVideos,
+//         currentPage: parseInt(page),
+//         totalPages: Math.ceil(totalVideos / limit),
+//       },
+//       "Videos fetched successfully",
+//     ),
+//   );
+// });
+
 const getVideos = asyncHandler(async (req, res) => {
-  const { query, page = 1, limit = 10 } = req.query; 
-  
-  const skip = (parseInt(page) - 1) * parseInt(limit);
-
-  const filter = { isPublished: true };
-
-  if (query) {
-    filter.$or = [
-      { title: { $regex: query, $options: "i" } },
-      { description: { $regex: query, $options: "i" } },
-    ];
-  }
-
-  const videos = await Video.find(filter)
-    .sort({ createdAt: -1 })
-    .skip(skip)
-    .limit(parseInt(limit))
-    .select("_id thumbnail title duration views owner createdAt")
-    .populate("owner", "avatar username fullname");
-
-  const totalVideos = await Video.countDocuments(filter);
-
-  return res.status(200).json(
-    new ApiResponse(
-      200,
-      { 
-        videos, 
-        totalVideos, 
-        currentPage: parseInt(page),
-        totalPages: Math.ceil(totalVideos / limit) 
+  const { query, page = 1, limit = 10 } = req.params;
+  const aggregatePipeline = [
+    {
+      $match: {
+        isPublished: true,
       },
-      "Videos fetched successfully"
-    )
+    },
+  ];
+  if (query) {
+    aggregatePipeline.push({
+      $match: {
+        $or: [
+          { title: { $regex: query, $options: "i" } },
+          { description: { $regex: query, $options: "i" } },
+        ],
+      },
+    });
+  }
+  aggregatePipeline.push(
+    {
+      $lookup: {
+        from: "users",
+        localField: "owner",
+        foreignField: "_id",
+        as: "owner",
+      },
+    },
+    { $addFields: { owner: { $first: "$owner" } } },
+    {
+      $lookup: {
+        from: "likes",
+        localField: "_id",
+        foreignField: "targetId",
+        as: "likes",
+      },
+    },
+    { $addFields: { likesCount: { $size: "$likes" } } },
   );
+
+  aggregatePipeline.push(
+    {
+      $project: {
+        _id: 1,
+        thumbnail: 1,
+        title: 1,
+        description: 1,
+        duration: 1,
+        views: 1,
+        "owner.username": 1,
+        "owner.fullname": 1,
+        "owner.avatar": 1,
+        likesCount: 1,
+      },
+    },
+    {
+      $sort: { createdAt: -1 },
+    },
+  );
+
+  const options = {
+    page: parseInt(page, 10),
+    limit: parseInt(limit, 10),
+  };
+
+  const result = await Video.aggregatePaginate(
+    Video.aggregate(aggregatePipeline),
+    options,
+  );
+
+  return res
+    .status(200)
+    .json(new ApiResponse(200, result, "Videos fethced successfully"));
 });
 
 export {
