@@ -17,6 +17,7 @@ import { User } from "../models/user.model.js";
 import { Like } from "../models/like.model.js";
 import { Comment } from "../models/comment.model.js";
 import { uploadVideoStream, uploadImageStream } from "../utils/cloudinary.js";
+import axios from "axios";
 
 const uploadVideo = asyncHandler(async (req, res) => {
   /*
@@ -88,10 +89,9 @@ const getVideoById = asyncHandler(async (req, res) => {
   if (!mongoose.Types.ObjectId.isValid(videoId)) {
     throw new ApiError(400, "Invalid video ID");
   }
-  const video = await Video.findById(videoId).populate(
-    "owner",
-    "fullname username avatar",
-  );
+  const video = await Video.findById(videoId)
+    .populate("owner", "fullname username avatar")
+    .select("-videoFile");
   if (!video || !video.isPublished) {
     throw new ApiError(404, "Video not found");
   }
@@ -113,9 +113,17 @@ const getVideoById = asyncHandler(async (req, res) => {
     $addToSet: { watchHistory: video._id },
   });
 
+  const streamUrl = `${req.protocol}://${req.get("host")}/api/v1/videos/stream/${video._id}`;
+
   return res
     .status(200)
-    .json(new ApiResponse(200, videoData, "Video fetched successfully"));
+    .json(
+      new ApiResponse(
+        200,
+        { videoData, streamUrl },
+        "Video fetched successfully",
+      ),
+    );
 });
 
 const updateVideo = asyncHandler(async (req, res) => {
@@ -304,6 +312,51 @@ const getVideos = asyncHandler(async (req, res) => {
     .json(new ApiResponse(200, result, "Videos fethced successfully"));
 });
 
+const streamVideo = asyncHandler(async (req, res) => {
+  const { videoId } = req.params;
+  const range = req.headers.range;
+
+  if (!range) {
+    throw new ApiError(400, "Requires range headers");
+  }
+  const video = await Video.findById(videoId);
+  if (!video || !video.isPublished) {
+    throw new ApiError(400, "Video does not exist or is private");
+  }
+  const videoUrl = video.videoFile;
+  try {
+    const response = await axios({
+      method: "get",
+      url: videoUrl,
+      responseType: "stream",
+      headers: {
+        Range: range,
+      },
+    });
+
+    res.writeHead(206, {
+      "Content-Range": response.headers["content-range"],
+      "Accept-Ranges": "bytes",
+      "Content-Length": response.headers["content-length"],
+      "Content-Type": "video/mp4",
+    });
+
+    response.data.pipe(res);
+
+    response.data.on("error", (err) => {
+      console.error("Stream pipe error:", err);
+      res.end();
+    });
+  } catch (error) {
+    if (error.response && error.response.status === 416) {
+      return res.status(416).send("Requested range not satisfiable");
+    }
+
+    console.error("Streaming error : ", error.message);
+    throw new ApiError(500, "Error while streaming video");
+  }
+});
+
 export {
   uploadVideo,
   getVideoById,
@@ -311,4 +364,5 @@ export {
   deleteVideo,
   togglePublishStatus,
   getVideos,
+  streamVideo,
 };
