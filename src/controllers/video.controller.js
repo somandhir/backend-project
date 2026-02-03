@@ -357,6 +357,43 @@ const streamVideo = asyncHandler(async (req, res) => {
   }
 });
 
+const updateWatchTime = asyncHandler(async (req, res) => {
+  const { videoId } = req.params;
+  const { watchedDuration } = req.body;
+
+  const video = await Video.findById(videoId);
+  if (!video) throw new ApiError(404, "Video not found");
+
+  const viewThreshold = Math.min(30, video.duration * 0.5);
+
+  if (watchedDuration >= viewThreshold) {
+    video.views += 1;
+    await video.save({ validateBeforeSave: false });
+    return res
+      .status(200)
+      .json(new ApiResponse(200, { views: video.views }, "View counted"));
+  }
+
+  return res.status(200).json(new ApiResponse(200, {}, "Watching..."));
+});
+
+/*
+frontend for update watch time : 
+video.addEventListener('timeupdate', () => {
+  // video.currentTime gives the actual second of the video
+  if (!viewLogged && video.currentTime >= 20) { 
+    viewLogged = true; // Prevents sending 100 requests
+    
+    // Call your heartbeat endpoint!
+    fetch(`/api/v1/videos/watch-time/${videoId}`, {
+      method: 'POST',
+      body: JSON.stringify({ watchedDuration: video.currentTime }),
+      // ... headers with credentials
+    });
+  }
+});
+ */
+
 export {
   uploadVideo,
   getVideoById,
@@ -365,4 +402,5 @@ export {
   togglePublishStatus,
   getVideos,
   streamVideo,
+  updateWatchTime,
 };

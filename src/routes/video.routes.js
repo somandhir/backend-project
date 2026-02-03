@@ -9,6 +9,7 @@ import {
   togglePublishStatus,
   getVideos,
   streamVideo,
+  updateWatchTime,
 } from "../controllers/video.controller.js";
 
 const router = Router();
@@ -28,5 +29,6 @@ router.route("/:videoId").patch(updateVideo);
 router.route("/:videoId").delete(deleteVideo);
 router.route("/:videoId/publish").patch(togglePublishStatus);
 router.route("/stream/:videoId").get(streamVideo);
+router.route("/watch-time/:videoId").post(verifyJWT, updateWatchTime);
 
 export default router;
